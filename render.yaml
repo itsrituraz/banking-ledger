@@ -1,0 +1,46 @@
+# =================================================================
+# Banking Ledger - Unified Production Deployment Blueprint (Render)
+# =================================================================
+services:
+  # 1. Backend REST API Service
+  - type: web
+    name: banking-ledger-backend
+    env: node
+    plan: starter
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "true"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SLOW_REQUEST_THRESHOLD_MS
+        value: "1000"
+      # Securely injected in dashboard (not tracked in repo)
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+
+  # 2. Frontend React Client (Vite Static Site)
+  - type: static
+    name: banking-ledger-frontend
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      # Set to https://<your-backend-service>.onrender.com/api in dashboard
+      - key: VITE_API_BASE_URL
+        sync: false

@@ -1,0 +1,1030 @@
+openapi: 3.0.3
+info:
+  title: Banking Ledger & FinTech Core Engine API
+  version: 1.0.0
+  description: |
+    Production-grade financial ledger API featuring:
+    - Double-entry debit/credit ledger with strict mathematical balance invariant
+    - ACID transaction management with document-level write serialization
+    - Deterministic fraud & risk engine (velocity, amounts, beneficiary history)
+    - Cryptographic idempotency protection against duplicate submissions
+    - Dual RBAC (USER / ADMIN) with token blacklist revocation
+    - Immutable, append-only operational audit trail
+    - Structured JSON observability and centralized security hardening
+  contact:
+    name: Engineering Team
+    email: security@bankledger.internal
+servers:
+  - url: http://localhost:3000/api
+    description: Local Development Server
+
+tags:
+  - name: Authentication
+    description: User registration, login, logout, and token session management
+  - name: Accounts
+    description: Bank account management, queries, and real-time ledger balance derivation
+  - name: Transactions
+    description: Financial fund transfers with double-entry ledger entries and fraud evaluation
+  - name: Admin Monitoring
+    description: Privileged read-only monitoring console for transactions, users, and KPI metrics (ADMIN ONLY)
+  - name: Audit Logs
+    description: Immutable operational and security audit records (ADMIN ONLY)
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Provide the JSON Web Token in the Authorization header (`Bearer <JWT>`).
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+      description: Authentication via HTTP-only session cookie set on login/register.
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: "Invalid credentials or request parameters"
+        status:
+          type: string
+          example: "failed"
+
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "6ab798da29c239c436858d7e"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        name:
+          type: string
+          example: "Alice Johnson"
+        role:
+          type: string
+          enum: [USER, ADMIN]
+          example: "USER"
+        systemUser:
+          type: boolean
+          example: false
+
+    Account:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "6ab770e47da3bfa88ffa31f9"
+        accountNumber:
+          type: string
+          example: "6ab770e47da3bfa88ffa31f9"
+        user:
+          type: string
+          example: "6ab798da29c239c436858d7e"
+        currency:
+          type: string
+          example: "INR"
+        status:
+          type: string
+          enum: [ACTIVE, FROZEN, CLOSED]
+          example: "ACTIVE"
+        balance:
+          type: number
+          format: float
+          description: Real-time balance derived from cumulative double-entry ledger credits minus debits.
+          example: 12500.50
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "6ab96cfd28c4610d65bf8ae3"
+        _id:
+          type: string
+          example: "6ab96cfd28c4610d65bf8ae3"
+        fromAccount:
+          type: string
+          example: "6ab770e47da3bfa88ffa31f9"
+        toAccount:
+          type: string
+          example: "6ab770e47da3bfa88ffa31fa"
+        amount:
+          type: number
+          format: float
+          example: 2500.00
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED, REVERSED]
+          example: "COMPLETED"
+        idempotencyKey:
+          type: string
+          example: "tx-idem-8842f1b0"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-09-28T00:52:10.123Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-09-28T00:52:10.180Z"
+
+    AdminTransactionDetail:
+      allOf:
+        - $ref: '#/components/schemas/Transaction'
+        - type: object
+          properties:
+            riskScore:
+              type: integer
+              example: 45
+            riskStatus:
+              type: string
+              enum: [APPROVED, FLAGGED, MANUAL_REVIEW, BLOCKED]
+              example: "FLAGGED"
+            riskReasons:
+              type: array
+              items:
+                type: string
+              example: ["VERY_HIGH_TRANSACTION_AMOUNT", "NEW_ACCOUNT"]
+            isFirstTimeBeneficiary:
+              type: boolean
+              example: true
+            clientIp:
+              type: string
+              example: "127.0.0.1"
+            userAgent:
+              type: string
+              example: "Mozilla/5.0"
+            ledgerEntries:
+              type: array
+              items:
+                $ref: '#/components/schemas/LedgerEntry'
+
+    LedgerEntry:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "6ab96cfd28c4610d65bf8ae5"
+        account:
+          type: string
+          example: "6ab770e47da3bfa88ffa31f9"
+        amount:
+          type: number
+          format: float
+          example: 2500.00
+        type:
+          type: string
+          enum: [DEBIT, CREDIT]
+          example: "DEBIT"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-09-28T00:52:10.145Z"
+
+    AuditLog:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "6ab96cfd28c4610d65bf8af0"
+        actorUser:
+          type: object
+          properties:
+            _id:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+            role:
+              type: string
+        action:
+          type: string
+          example: "TRANSACTION_COMPLETED"
+        resourceType:
+          type: string
+          enum: [TRANSACTION, USER, ACCOUNT, AUTH, ADMIN, RISK, SYSTEM]
+          example: "TRANSACTION"
+        resourceId:
+          type: string
+          example: "6ab96cfd28c4610d65bf8ae3"
+        transactionId:
+          type: string
+          example: "6ab96cfd28c4610d65bf8ae3"
+        requestId:
+          type: string
+          example: "REQ-1d5c96096317"
+        ipAddress:
+          type: string
+          example: "127.0.0.1"
+        userAgent:
+          type: string
+          example: "Mozilla/5.0"
+        metadata:
+          type: object
+          description: Sanitized context metadata (secrets and passwords permanently excluded)
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-09-28T00:52:10.160Z"
+
+    DashboardStats:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+          example: 212
+        totalTransactions:
+          type: integer
+          example: 463
+        completedTransactions:
+          type: integer
+          example: 242
+        failedTransactions:
+          type: integer
+          example: 221
+        flaggedTransactions:
+          type: integer
+          example: 195
+        manualReviewTransactions:
+          type: integer
+          example: 0
+        blockedTransactions:
+          type: integer
+          example: 21
+        totalTransactionVolume:
+          type: number
+          format: float
+          example: 3929296.61
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 463
+        totalPages:
+          type: integer
+          example: 24
+
+paths:
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new user
+      description: Creates a user account with hashed password and provisions an initial bank account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name:
+                  type: string
+                  example: "Alice Johnson"
+                email:
+                  type: string
+                  format: email
+                  example: "alice@example.com"
+                password:
+                  type: string
+                  format: password
+                  example: "StrongPassword123!"
+      responses:
+        201:
+          description: Registration successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: "token=eyJhbGci...; Path=/; HttpOnly; SameSite=Lax"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  account:
+                    $ref: '#/components/schemas/Account'
+                  token:
+                    type: string
+        400:
+          description: Missing required fields or validation failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        422:
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        429:
+          description: Rate limit exceeded (20 requests per 15 minutes)
+
+  /auth/signup:
+    post:
+      tags: [Authentication]
+      summary: Register alias
+      description: Alias to /auth/register
+      requestBody:
+        $ref: '#/paths/~1auth~1register/post/requestBody'
+      responses:
+        201:
+          $ref: '#/paths/~1auth~1register/post/responses/201'
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: User authentication
+      description: Authenticates user credentials, sets session cookie, and returns signed JWT.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "admin@ledger.internal"
+                password:
+                  type: string
+                  format: password
+                  example: "Admin@123456"
+      responses:
+        200:
+          description: Authentication successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  token:
+                    type: string
+        400:
+          description: Missing email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        429:
+          description: Rate limit exceeded (20 requests per 15 minutes)
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Terminate session
+      description: Clears authentication cookie and adds token to MongoDB blacklist.
+      responses:
+        200:
+          description: Successfully logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User logged out successfully"
+
+  /auth/me:
+    get:
+      tags: [Authentication]
+      summary: Current user session profile
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      responses:
+        200:
+          description: Profile retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+        401:
+          description: Missing, invalid, or revoked token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/profile:
+    get:
+      tags: [Authentication]
+      summary: Current user profile alias
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      responses:
+        200:
+          $ref: '#/paths/~1auth~1me/get/responses/200'
+
+  /accounts:
+    get:
+      tags: [Accounts]
+      summary: List user accounts
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      responses:
+        200:
+          description: Accounts and ledger-derived balances retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Account'
+        401:
+          $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags: [Accounts]
+      summary: Create new bank account
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      responses:
+        201:
+          description: Account created with zero initial balance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  account:
+                    $ref: '#/components/schemas/Account'
+        401:
+          $ref: '#/components/schemas/ErrorResponse'
+
+  /accounts/balance/{accountId}:
+    get:
+      tags: [Accounts]
+      summary: Real-time account balance derivation
+      description: Computes current balance dynamically from double-entry ledger entries.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - in: path
+          name: accountId
+          required: true
+          schema:
+            type: string
+          example: "6ab770e47da3bfa88ffa31f9"
+      responses:
+        200:
+          description: Account balance retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accountId:
+                    type: string
+                  accountNumber:
+                    type: string
+                  balance:
+                    type: number
+                    format: float
+                    example: 5400.00
+        400:
+          description: Invalid account ID format
+        401:
+          description: Unauthorized
+        404:
+          description: Account not found or unauthorized access
+
+  /transactions:
+    get:
+      tags: [Transactions]
+      summary: User transaction history
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [all, credit, debit]
+          description: Filter by credit or debit
+        - in: query
+          name: limit
+          schema:
+            type: integer
+          description: Max items to return
+      responses:
+        200:
+          description: Transaction history retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        amount:
+                          type: number
+                        status:
+                          type: string
+                        type:
+                          type: string
+                          enum: [credit, debit]
+                        counterparty:
+                          type: string
+                        createdAt:
+                          type: string
+                  total:
+                    type: integer
+        401:
+          $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags: [Transactions]
+      summary: Execute funds transfer
+      description: |
+        Executes a peer-to-peer transfer with:
+        - Concurrency write-lock on sender account
+        - In-session balance derivation from ledger entries
+        - Deterministic risk & fraud scoring (velocity, large amounts, new accounts)
+        - Idempotency protection against duplicate debit execution
+        - Atomic double-entry DEBIT and CREDIT insertion within a single MongoDB ACID transaction
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fromAccount, toAccount, amount, idempotencyKey]
+              properties:
+                fromAccount:
+                  type: string
+                  example: "6ab770e47da3bfa88ffa31f9"
+                toAccount:
+                  type: string
+                  example: "6ab770e47da3bfa88ffa31fa"
+                amount:
+                  type: number
+                  minimum: 0.01
+                  example: 1500.00
+                idempotencyKey:
+                  type: string
+                  example: "idemp-unique-client-uuid-42"
+      responses:
+        201:
+          description: Transaction completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Transaction completed successfully"
+                  transaction:
+                    $ref: '#/components/schemas/Transaction'
+        200:
+          description: Idempotent replay: Transaction was already processed previously
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Transaction already processed"
+                  transaction:
+                    $ref: '#/components/schemas/Transaction'
+        400:
+          description: Validation error (e.g. self-transfer, non-positive amount, inactive account)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        403:
+          description: Risk policy action: Transaction declined or held for manual verification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        404:
+          description: Sender or receiver account not found
+        409:
+          description: Write conflict retry exhausted or insufficient balance
+        429:
+          description: Rate limit exceeded (60 transactions per minute)
+
+  /transactions/system/initial-funds:
+    post:
+      tags: [Transactions]
+      summary: Initial system deposit
+      description: System-user privileged deposit endpoint for initial account funding.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toAccount, amount, idempotencyKey]
+              properties:
+                toAccount:
+                  type: string
+                amount:
+                  type: number
+                idempotencyKey:
+                  type: string
+      responses:
+        201:
+          description: Initial funds deposited successfully
+        403:
+          description: System user privileges required
+
+  /admin/health:
+    get:
+      tags: [Admin Monitoring]
+      summary: Admin session verification
+      description: Verifies active authentication and ADMIN authorization privileges.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      responses:
+        200:
+          description: Admin privileges verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Admin access granted"
+        401:
+          description: Unauthorized
+        403:
+          description: Forbidden (USER role attempting admin access)
+
+  /admin/dashboard/stats:
+    get:
+      tags: [Admin Monitoring]
+      summary: Aggregate platform analytics
+      description: Aggregates total registered users, transaction counts, status breakdowns, and cumulative gross volume.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      responses:
+        200:
+          description: Platform statistics retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardStats'
+        401:
+          $ref: '#/components/schemas/ErrorResponse'
+        403:
+          $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/transactions:
+    get:
+      tags: [Admin Monitoring]
+      summary: Query and filter platform transactions
+      description: Paginated query of transactions with risk metadata, counterparty population, and date filtering.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [PENDING, COMPLETED, FAILED, REVERSED]
+        - in: query
+          name: riskStatus
+          schema:
+            type: string
+            enum: [APPROVED, FLAGGED, MANUAL_REVIEW, BLOCKED]
+        - in: query
+          name: minAmount
+          schema:
+            type: number
+        - in: query
+          name: maxAmount
+          schema:
+            type: number
+        - in: query
+          name: fromAccount
+          schema:
+            type: string
+        - in: query
+          name: toAccount
+          schema:
+            type: string
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+            format: date
+      responses:
+        200:
+          description: Transactions retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminTransactionDetail'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        400:
+          description: Invalid filter bounds or parameter format
+        401:
+          description: Unauthorized
+        403:
+          description: Admin privileges required
+
+  /admin/transactions/flagged:
+    get:
+      tags: [Admin Monitoring]
+      summary: Query elevated risk transactions
+      description: Retrieves transactions requiring risk supervision (FLAGGED, MANUAL_REVIEW, BLOCKED). Creates an audit log entry.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+      responses:
+        200:
+          description: Elevated risk transactions retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminTransactionDetail'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        401:
+          $ref: '#/components/schemas/ErrorResponse'
+        403:
+          $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/transactions/{id}:
+    get:
+      tags: [Admin Monitoring]
+      summary: Detailed transaction & double-entry inspection
+      description: Fetches full transaction details including populated users and matching DEBIT and CREDIT ledger entries.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: "6ab96cfd28c4610d65bf8ae3"
+      responses:
+        200:
+          description: Full transaction record and ledger entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transaction:
+                    $ref: '#/components/schemas/AdminTransactionDetail'
+        400:
+          description: Invalid transaction ID format
+        401:
+          description: Unauthorized
+        403:
+          description: Admin privileges required
+        404:
+          description: Transaction not found
+
+  /admin/users:
+    get:
+      tags: [Admin Monitoring]
+      summary: User directory with search
+      description: Returns safe projections of registered users. Passwords and credentials permanently excluded.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Case-insensitive search on name or email
+      responses:
+        200:
+          description: User directory list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        401:
+          $ref: '#/components/schemas/ErrorResponse'
+        403:
+          $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/audit-logs:
+    get:
+      tags: [Audit Logs]
+      summary: Query immutable audit trail
+      description: Paginated query of immutable security and operational audit records.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - in: query
+          name: action
+          schema:
+            type: string
+            example: "TRANSACTION_COMPLETED"
+        - in: query
+          name: resourceType
+          schema:
+            type: string
+            enum: [TRANSACTION, USER, ACCOUNT, AUTH, ADMIN, RISK, SYSTEM]
+        - in: query
+          name: actorUser
+          schema:
+            type: string
+        - in: query
+          name: transactionId
+          schema:
+            type: string
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+            format: date
+      responses:
+        200:
+          description: Audit logs retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  auditLogs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        400:
+          description: Invalid filter or pagination parameters
+        401:
+          description: Unauthorized
+        403:
+          description: Admin privileges required
+
+  /admin/audit-logs/{id}:
+    get:
+      tags: [Audit Logs]
+      summary: Individual audit log record
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: "6ab96cfd28c4610d65bf8af0"
+      responses:
+        200:
+          description: Audit log record retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  auditLog:
+                    $ref: '#/components/schemas/AuditLog'
+        400:
+          description: Invalid audit log ID format
+        401:
+          description: Unauthorized
+        403:
+          description: Admin privileges required
+        404:
+          description: Audit log not found
+          
